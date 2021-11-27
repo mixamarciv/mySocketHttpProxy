@@ -4,7 +4,7 @@ import { URL } from 'url';
 import { wait } from '../../utils';
 import { log, logger } from '../logger';
 
-interface IConnectOptions {
+export interface ISocketClientOptions {
     port: number;
     host: string;
     timeout: number;
@@ -14,17 +14,17 @@ interface IConnectOptions {
 }
 
 export class SocketClient {
-    protected _options: IConnectOptions;
+    protected _options: ISocketClientOptions;
     protected _client: net.Socket = null;
     protected _connected: boolean = false;
     protected _waitForConnect: boolean = false; // ждем соединения (ответа от сервера)
     protected _handlers: { [key: string]: Function } = {};
 
-    constructor(config: IConnectOptions) {
+    constructor(config: ISocketClientOptions) {
         this.setConfig(config);
     }
 
-    setConfig(config: IConnectOptions): void {
+    setConfig(config: ISocketClientOptions): void {
         this._options = { ...config };
     }
 
@@ -62,6 +62,12 @@ export class SocketClient {
         return false;
     }
 
+    sendData(data: string): void {
+        if (this.isConnected()) {
+            this._client.write(data);
+        }
+    }
+
     protected _connect(): void {
         const { port, host, timeout } = this._options;
         const connectOptions = { port, host, timeout };
@@ -75,7 +81,7 @@ export class SocketClient {
     }
 
     protected _onConnect(...args): void {
-        this._log('SocketClient event connect: ', args);
+        this._log('event connect: ', args);
         this._connected = true;
         this._waitForConnect = false;
 
@@ -83,7 +89,7 @@ export class SocketClient {
     }
 
     protected _onError(err): void {
-        this._log('SocketClient event error: ', err);
+        this._log('event error: ', err);
 
         if (this._handlers.error) this._handlers.error(err);
 
@@ -97,20 +103,20 @@ export class SocketClient {
     }
 
     protected _onData(...args): void {
-        this._log('SocketClient event data: ', args);
+        this._log('event data: ', args);
 
         if (this._handlers.data) this._handlers.data(...args);
     }
 
     protected _onEnd(...args): void {
-        this._log('cliSocketClient event end: ', args);
+        this._log('event end: ', args);
 
         if (this._handlers.end) this._handlers.end(...args);
     }
 
     protected _log(...args): void {
         if (this._options.logEvents) {
-            log(...args);
+            log('SocketClient', ...args);
         }
     }
 }

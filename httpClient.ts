@@ -3,39 +3,33 @@ import http from 'http';
 import { URL } from 'url';
 import { logUtils, wait } from '../utils';
 import { logger, log } from './logger';
-import { SocketClient } from './httpSocketClient';
+import { config } from './config';
+import {
+    SocketClient,
+    ISocketClientOptions,
+    HttpClient,
+    IHttpClientOptions,
+} from './httpSocketClient';
 
-const SERVER_SOCKET_PORT = Number(process.env.SERVER_SOCKET_PORT);
-const SERVER_SOCKET_HOST = process.env.SERVER_SOCKET_HOST;
-const REDIRECT_REQUEST_TO = process.env.REDIRECT_REQUEST_TO;
+startSocketClient();
 
-startSocketClient({
-    socketPort: SERVER_SOCKET_PORT,
-    socketHost: SERVER_SOCKET_HOST,
-    connectTimeout: 1000,
-});
-
-interface IStartSocketProxy {
-    socketPort: number;
-    socketHost: string;
-    connectTimeout: number;
-}
-
-async function startSocketClient(config: IStartSocketProxy) {
-    const connectOptions = {
-        port: config.socketPort,
-        host: config.socketHost,
-        timeout: config.connectTimeout,
+async function startSocketClient() {
+    const connectOptions: ISocketClientOptions = {
+        port: config.socketServerPort,
+        host: config.socketServerHost,
+        timeout: config.clientConnectTimeout,
         maxReconnectCount: 5000,
         reconnectOnError: true,
         logEvents: true,
     };
 
-    const client = new SocketClient(connectOptions);
+    const socketClient = new SocketClient(connectOptions);
+    const httpClientOptions: IHttpClientOptions = {
+        socketClient,
+        sendRequestTo: config.redirectRequestTo,
+        logEvents: true,
+    };
+    const httpClient = new HttpClient(httpClientOptions);
 
-    client.setHandler('data', (args) => {
-        log('socket data: ', args);
-    });
-
-    await client.connect();
+    socketClient.connect();
 }
