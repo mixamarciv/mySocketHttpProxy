@@ -45,12 +45,23 @@ export class SocketServer {
 
     protected _startSocketServer(): void {
         const { socketPort } = this._options;
-        this._socketServer = net.createServer((client: net.Socket) => {
-            this._onSocketClientConnect(client);
-            client.on('data', (data) => this._onSocketClientData(client, data));
-            client.on('end', () => this._onSocketClientEnd(client));
-            client.on('error', (err) => this._onSocketClientError(client, err));
-        });
+        const serverOptions = {
+            allowHalfOpen: true,
+        };
+
+        this._socketServer = net.createServer(
+            serverOptions,
+            (client: net.Socket) => {
+                this._onSocketClientConnect(client);
+                client.on('data', (data) =>
+                    this._onSocketClientData(client, data)
+                );
+                client.on('end', () => this._onSocketClientEnd(client));
+                client.on('error', (err) =>
+                    this._onSocketClientError(client, err)
+                );
+            }
+        );
 
         this._socketServer
             .listen(socketPort, () => {

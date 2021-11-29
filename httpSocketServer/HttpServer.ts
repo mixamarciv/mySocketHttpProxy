@@ -36,6 +36,8 @@ export class HttpServer {
         this._options = { ...config };
         this._socketServer = config.socketServer;
         this._socketServer.setHandler('data', (client, data: Buffer) => {
+            // TODO: надо поправить, - тут ошибка, данные приходят разными блоками,
+            // не в том же порядке как их отправляют
             this.onGetResult(data.toString());
         });
     }
@@ -76,8 +78,12 @@ export class HttpServer {
 
     sendRequest(httpReq: IHttpRequest): void {
         this._log(httpReq, 'new request');
-        const reqStr = `${httpReq.id}${httpReq.req.url}`;
-        this._socketServer.sendDataToClient(reqStr);
+
+        const id = httpReq.id;
+        const url = httpReq.req.url;
+
+        const requestStr = `${id}${url}`;
+        this._socketServer.sendDataToClient(requestStr);
     }
 
     onGetResult(data: string): void {
