@@ -40,10 +40,6 @@ export class HttpClient {
         });
     }
 
-    protected stopWorker(id: string): void {
-        this._reqWorkers.delete(id);
-    }
-
     protected _onData(data: string): void {
         this._log('event data', data);
 
@@ -52,7 +48,7 @@ export class HttpClient {
 
         const stopWorker = () => {
             this._sendData(`${id}/${id}`);
-            this.stopWorker(id);
+            this._stopWorker(id);
         };
 
         const params: IHttpRequestWorkerOptions = {
@@ -75,6 +71,10 @@ export class HttpClient {
         const worker = new HttpRequestWorker(params);
         this._reqWorkers.set(id, worker);
         worker.sendRequest();
+    }
+
+    protected _stopWorker(id: string): void {
+        this._reqWorkers.delete(id);
     }
 
     protected _sendData(data: string): void {

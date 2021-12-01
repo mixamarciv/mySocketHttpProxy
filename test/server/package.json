@@ -1,0 +1,12 @@
+{
+    "name": "clientApi",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.ts",
+    "scripts": {
+        "start": "ts-node ./index.ts",
+        "watch": "nodemon --watch \"./**\" --ext \"ts,js\" --ignore \"temp/**\" --exec \"ts-node ./index.ts\""
+    },
+    "author": "",
+    "license": "ISC"
+}
