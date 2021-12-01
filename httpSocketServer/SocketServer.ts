@@ -1,5 +1,6 @@
 import net from 'net';
 import { log, logger } from '../logger';
+import { bufferToHexStr } from '../utils';
 
 export interface ISocketServerOptions {
     socketPort: number;
@@ -89,7 +90,12 @@ export class SocketServer {
     }
 
     protected _onSocketClientData(client: net.Socket, data): void {
-        this._logSocketClient(client, 'event data: ', data);
+        this._logSocketClient(
+            client,
+            'event data: ',
+            `size: ${data.length}`,
+            `buff: ${bufferToHexStr(Buffer.from(data))}`
+        );
         if (this._handlers.data) this._handlers.data(client, data);
     }
 

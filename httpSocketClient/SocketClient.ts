@@ -62,7 +62,7 @@ export class SocketClient {
         return false;
     }
 
-    sendData(data: string): void {
+    sendData(data: Buffer): void {
         if (this.isConnected()) {
             this._client.write(data);
         }

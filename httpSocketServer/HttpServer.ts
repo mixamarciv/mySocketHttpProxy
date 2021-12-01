@@ -5,6 +5,7 @@ import { wait, getUuidOnlyNumLetters } from '../../utils';
 import { log, logger } from '../logger';
 import { config } from '../config';
 import { SocketServer } from './SocketServer';
+import replace from 'buffer-replace';
 
 const REQUEST_ID_LENGTH = config.idRequestLength;
 const getUuid = getUuidOnlyNumLetters(REQUEST_ID_LENGTH);
@@ -38,7 +39,7 @@ export class HttpServer {
         this._socketServer.setHandler('data', (client, data: Buffer) => {
             // TODO: надо поправить, - тут ошибка, данные приходят разными блоками,
             // не в том же порядке как их отправляют
-            this.onGetResult(data.toString());
+            this.onGetResult(data);
         });
     }
 
@@ -86,19 +87,20 @@ export class HttpServer {
         this._socketServer.sendDataToClient(requestStr);
     }
 
-    onGetResult(data: string): void {
-        const id = data.substr(0, REQUEST_ID_LENGTH);
-        const result = data.substr(REQUEST_ID_LENGTH);
+    onGetResult(data: Buffer): void {
+        const id = data.subarray(0, REQUEST_ID_LENGTH).toString();
+        const result = data;
         const httpReq = this._httpRequests.get(id);
         if (httpReq) {
-            const getResultWithoutId = (text: string) => {
-                return text.replace(new RegExp(`${id}`, 'g'), '');
+            const getResultWithoutId = (buf: Buffer) => {
+                return replace(buf, id, '');
             };
-            const regexpEnd = new RegExp(`(${id}|)\/${id}\$`);
-            const hasEndData = regexpEnd.test(result);
-            if (hasEndData) {
-                const resultWithoutEndStr = result.replace(regexpEnd, '');
-                httpReq.res.end(getResultWithoutId(resultWithoutEndStr));
+            const endText = Buffer.from(`${id}\/${id}`);
+            const hasEndText = result.indexOf(endText) >= 0;
+
+            if (hasEndText) {
+                const resultWithoutEndText = replace(result, endText, '');
+                httpReq.res.end(getResultWithoutId(resultWithoutEndText));
                 this._httpRequests.delete(id);
             } else {
                 httpReq.res.write(getResultWithoutId(result));

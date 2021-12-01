@@ -5,8 +5,8 @@
     "main": "index.js",
     "scripts": {
         "start": "ts-node ./index.ts",
-        "watch_httpServer": "nodemon --watch \"./**\" --ext \"ts,js\" --ignore \"temp/**\" --ignore httpClient.ts --ignore \"httpSocketClient/**\" --exec \"ts-node ./httpServer.ts\" --type httpServer",
-        "watch_httpClient": "nodemon --watch \"./**\" --ext \"ts,js\" --ignore \"temp/**\" --ignore httpServer.ts --ignore \"httpSocketServer/**\" --exec \"ts-node ./httpClient.ts\" --type httpClient"
+        "watch_httpServer": "nodemon --watch \"./**\" --ext \"ts,js\" --ignore \"temp/**\" --ignore httpClient.ts --ignore \"httpSocketClient/**\" --ignore \"test/**\" --exec \"ts-node ./httpServer.ts\" --type httpServer",
+        "watch_httpClient": "nodemon --watch \"./**\" --ext \"ts,js\" --ignore \"temp/**\" --ignore httpServer.ts --ignore \"httpSocketServer/**\" --ignore \"test/**\" --exec \"ts-node ./httpClient.ts\" --type httpClient"
     },
     "author": "",
     "license": "ISC"

@@ -2,7 +2,7 @@ import net from 'net';
 import http from 'http';
 import { IHost } from '../config';
 import { URL } from 'url';
-import { wait } from '../../utils';
+import { wait, bufferToHexStr } from '../utils';
 import { log, logger } from '../logger';
 import { SocketClient } from './SocketClient';
 import { config } from '../config';
@@ -44,26 +44,28 @@ export class HttpClient {
         this._log('event data', data);
 
         const id = data.substr(0, REQUEST_ID_LENGTH);
+        const idBuff = Buffer.from(id);
         const url = data.substr(REQUEST_ID_LENGTH);
+        let isStopped = false;
 
         const stopWorker = () => {
-            this._sendData(`${id}/${id}`);
-            this._stopWorker(id);
+            if (!isStopped) {
+                isStopped = true;
+                this._sendData(Buffer.from(`${id}/${id}`));
+                this._stopWorker(id);
+            }
         };
 
         const params: IHttpRequestWorkerOptions = {
-            logEvents: true,
+            logEvents: this._options.logEvents,
             id,
             url,
             onData: (data1) => {
                 // отправляем данные
-                this._sendData(`${id}${data1}`);
+                const dataBuff = Buffer.concat([idBuff, data1]);
+                this._sendData(dataBuff);
             },
-            onEnd: (data1) => {
-                // отправляем информацию о том что это конец данных
-                if (data1) this._sendData(`${id}${data1}`);
-                stopWorker();
-            },
+            onEnd: stopWorker,
             onError: stopWorker,
             onClose: stopWorker,
         };
@@ -77,7 +79,7 @@ export class HttpClient {
         this._reqWorkers.delete(id);
     }
 
-    protected _sendData(data: string): void {
+    protected _sendData(data: Buffer): void {
         this._socketClient.sendData(data);
     }
 
@@ -88,20 +90,27 @@ export class HttpClient {
     }
 }
 
+type TEventCallback = () => void;
+type TEventDataCallback = (buf: Buffer) => void;
+type TEventErrorCallback = (err: Error) => void;
+type TEventsCallback =
+    | TEventCallback
+    | TEventDataCallback
+    | TEventErrorCallback;
+
 interface IHttpRequestWorkerOptions {
     logEvents?: boolean;
     id: string;
     url: string;
-    onData?: (data1: string) => void;
-    onEnd?: (data1: string) => void;
-    onClose?: () => void;
-    onError?: (err: Error) => void;
+    onData?: TEventDataCallback;
+    onEnd?: TEventCallback;
+    onClose?: TEventCallback;
+    onError?: TEventErrorCallback;
 }
 
 class HttpRequestWorker {
     protected _options: IHttpRequestWorkerOptions;
     protected _request: http.ClientRequest;
-    protected _handlers: { [key: string]: Function } = {};
 
     constructor(config: IHttpRequestWorkerOptions) {
         this.setConfig(config);
@@ -109,14 +118,6 @@ class HttpRequestWorker {
 
     setConfig(config: IHttpRequestWorkerOptions): void {
         this._options = { ...config };
-        if (config.onData) this.setHandler('data', config.onData);
-        if (config.onEnd) this.setHandler('end', config.onEnd);
-        if (config.onClose) this.setHandler('close', config.onClose);
-        if (config.onError) this.setHandler('error', config.onError);
-    }
-
-    setHandler(name: string, handler: Function): void {
-        this._handlers[name] = handler;
     }
 
     protected _getUrl(): string {
@@ -136,10 +137,10 @@ class HttpRequestWorker {
         const url = this._getUrl();
 
         this._request = http.request(url, (res) => {
-            res.setEncoding('utf8');
+            // res.setEncoding('utf8');  - из-за этой строчки бьются бинарные данные
             res.on('data', (chunk) => this._onData(chunk));
             res.on('end', () => this._onEnd());
-            // res.on('close', () => this._onClose());
+            res.on('close', () => this._onClose());
             res.on('error', (e) => this._onError(e));
         });
 
@@ -151,25 +152,32 @@ class HttpRequestWorker {
     protected _onError(err): void {
         this._log('event error: ', err);
 
-        if (this._handlers.error) this._handlers.error(err);
+        if (this._options.onError) this._options.onError(err);
     }
 
-    protected _onData(data: string): void {
-        this._log('event data: ', data);
+    protected _onData(data: Buffer): void {
+        this._log(
+            'event data: ',
+            'size:',
+            data.length
+            // bufferToHexStr(Buffer.from(data))
+        );
+        let dataBuff = data;
+        if (!Buffer.isBuffer(data)) dataBuff = Buffer.from(data);
 
-        if (this._handlers.data) this._handlers.data(data);
+        if (this._options.onData) this._options.onData(dataBuff);
     }
 
-    protected _onEnd(data?: string): void {
-        this._log('event end: ', data);
+    protected _onEnd(): void {
+        this._log('event end');
 
-        if (this._handlers.end) this._handlers.end(data);
+        if (this._options.onEnd) this._options.onEnd();
     }
 
     protected _onClose(): void {
         this._log('event close');
 
-        if (this._handlers.close) this._handlers.close();
+        if (this._options.onClose) this._options.onClose();
     }
 
     protected _log(...args): void {

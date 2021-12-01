@@ -1,4 +1,5 @@
 import { config } from './config';
+import path from 'path';
 import {
     express as expressUtils,
     IResult,
@@ -25,6 +26,26 @@ app.use(addStartTimeInfo);
 app.all('/', appAbout({ text: helpText }));
 app.use(addMethodSendJson);
 app.get('/favicon.ico', (req, res) => res.send('not need'));
+app.get('/public/*', (req, res, next) => {
+    const options = {
+        root: path.join(__dirname, 'public'),
+        dotfiles: 'deny',
+        headers: {
+            'x-timestamp': Date.now(),
+            'x-sent': true,
+        },
+    };
+
+    const fileName = req.path.replace(/^\/public/g, '');
+    res.sendFile(fileName, options, (err) => {
+        if (err) {
+            next(err);
+        } else {
+            console.log('Sent:', fileName);
+        }
+    });
+});
+
 app.get('*', async (req, res: any) => {
     const q = req.query;
     const method = (req.path as string).substr(1);
