@@ -6,6 +6,11 @@ import { wait, bufferToHexStr } from '../utils';
 import { log, logger } from '../logger';
 import { SocketClient } from './SocketClient';
 import { config } from '../config';
+import {
+    TEventCallback,
+    TEventErrorCallback,
+    TEventDataCallback,
+} from '../interface';
 
 const REQUEST_ID_LENGTH = config.idRequestLength;
 const REQUEST_FROM = config.redirectRequestTo;
@@ -35,7 +40,7 @@ export class HttpClient {
     setConfig(config: IHttpClientOptions): void {
         this._options = { ...config };
         this._socketClient = config.socketClient;
-        this._socketClient.setHandler('data', (data: Buffer) => {
+        this._socketClient.setOnDataHandler((data: Buffer) => {
             this._onData(data.toString());
         });
     }
@@ -47,10 +52,22 @@ export class HttpClient {
         const idBuff = Buffer.from(id);
         const url = data.substr(REQUEST_ID_LENGTH);
         let isStopped = false;
+        const results: Buffer[] = [];
 
         const stopWorker = () => {
             if (!isStopped) {
                 isStopped = true;
+
+                const dataBuff = Buffer.concat(results);
+                let pos = 0;
+                const CHUNK_SIZE = 2000;
+
+                while (pos < dataBuff.length) {
+                    const chunk = dataBuff.slice(pos, pos + CHUNK_SIZE);
+                    this._sendData(Buffer.concat([idBuff, chunk]));
+                    pos += CHUNK_SIZE;
+                }
+
                 this._sendData(Buffer.from(`${id}/${id}`));
                 this._stopWorker(id);
             }
@@ -61,9 +78,8 @@ export class HttpClient {
             id,
             url,
             onData: (data1) => {
-                // отправляем данные
-                const dataBuff = Buffer.concat([idBuff, data1]);
-                this._sendData(dataBuff);
+                // собираем данные
+                results.push(data1);
             },
             onEnd: stopWorker,
             onError: stopWorker,
@@ -89,14 +105,6 @@ export class HttpClient {
         }
     }
 }
-
-type TEventCallback = () => void;
-type TEventDataCallback = (buf: Buffer) => void;
-type TEventErrorCallback = (err: Error) => void;
-type TEventsCallback =
-    | TEventCallback
-    | TEventDataCallback
-    | TEventErrorCallback;
 
 interface IHttpRequestWorkerOptions {
     logEvents?: boolean;

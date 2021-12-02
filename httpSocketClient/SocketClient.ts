@@ -1,8 +1,14 @@
 import net from 'net';
 import http from 'http';
 import { URL } from 'url';
-import { wait } from '../../utils';
+import { wait, bufferToHexStr } from '../utils';
 import { log, logger } from '../logger';
+import {
+    TAnyEventCallback,
+    TEventCallback,
+    TEventErrorCallback,
+    TEventDataCallback,
+} from '../interface';
 
 export interface ISocketClientOptions {
     port: number;
@@ -11,6 +17,11 @@ export interface ISocketClientOptions {
     maxReconnectCount: number;
     reconnectOnError: boolean;
     logEvents?: boolean;
+    onConnect?: TEventCallback;
+    onData?: TEventDataCallback;
+    onEnd?: TEventCallback;
+    onClose?: TEventCallback;
+    onError?: TEventErrorCallback;
 }
 
 export class SocketClient {
@@ -18,7 +29,6 @@ export class SocketClient {
     protected _client: net.Socket = null;
     protected _connected: boolean = false;
     protected _waitForConnect: boolean = false; // ждем соединения (ответа от сервера)
-    protected _handlers: { [key: string]: Function } = {};
 
     constructor(config: ISocketClientOptions) {
         this.setConfig(config);
@@ -28,8 +38,24 @@ export class SocketClient {
         this._options = { ...config };
     }
 
-    setHandler(name: string, handler: Function): void {
-        this._handlers[name] = handler;
+    setOnConnectHandler(handler: TEventCallback): void {
+        this._options.onConnect = handler;
+    }
+
+    setOnDataHandler(handler: TEventDataCallback): void {
+        this._options.onData = handler;
+    }
+
+    setOnEndHandler(handler: TEventCallback): void {
+        this._options.onEnd = handler;
+    }
+
+    setOnCloseHandler(handler: TEventCallback): void {
+        this._options.onClose = handler;
+    }
+
+    setOnErrorHandler(handler: TEventErrorCallback): void {
+        this._options.onError = handler;
     }
 
     async connect(): Promise<boolean> {
@@ -63,6 +89,13 @@ export class SocketClient {
     }
 
     sendData(data: Buffer): void {
+        this._log(
+            'sendData: ',
+            this.isConnected(),
+            `size: ${data.length}`
+            // `buff: ${bufferToHexStr(Buffer.from(data))}`
+            // data
+        );
         if (this.isConnected()) {
             this._client.write(data);
         }
@@ -76,22 +109,23 @@ export class SocketClient {
             this._onConnect(...args)
         );
         this._client.on('error', (err) => this._onError(err));
-        this._client.on('data', (...args) => this._onData(...args));
-        this._client.on('end', (...args) => this._onEnd(...args));
+        this._client.on('data', (data) => this._onData(data));
+        this._client.on('end', () => this._onEnd());
+        this._client.on('close', () => this._onClose());
     }
 
-    protected _onConnect(...args): void {
-        this._log('event connect: ', args);
+    protected _onConnect(): void {
+        this._log('event connect');
         this._connected = true;
         this._waitForConnect = false;
 
-        if (this._handlers.connect) this._handlers.connect(...args);
+        if (this._options.onConnect) this._options.onConnect();
     }
 
     protected _onError(err): void {
         this._log('event error: ', err);
 
-        if (this._handlers.error) this._handlers.error(err);
+        if (this._options.onError) this._options.onError(err);
 
         if (
             !this.isConnected() &&
@@ -102,16 +136,22 @@ export class SocketClient {
         }
     }
 
-    protected _onData(...args): void {
-        this._log('event data: ', args);
+    protected _onData(data: Buffer): void {
+        this._log('event data: ', data);
 
-        if (this._handlers.data) this._handlers.data(...args);
+        if (this._options.onData) this._options.onData(data);
     }
 
-    protected _onEnd(...args): void {
-        this._log('event end: ', args);
+    protected _onEnd(): void {
+        this._log('event end');
 
-        if (this._handlers.end) this._handlers.end(...args);
+        if (this._options.onEnd) this._options.onEnd();
+    }
+
+    protected _onClose(): void {
+        this._log('event close');
+
+        if (this._options.onClose) this._options.onClose();
     }
 
     protected _log(...args): void {

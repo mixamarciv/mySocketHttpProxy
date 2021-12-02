@@ -6,6 +6,7 @@ import { log, logger } from '../logger';
 import { config } from '../config';
 import { SocketServer } from './SocketServer';
 import replace from 'buffer-replace';
+import { bufferToHexStr } from '../utils';
 
 const REQUEST_ID_LENGTH = config.idRequestLength;
 const getUuid = getUuidOnlyNumLetters(REQUEST_ID_LENGTH);
@@ -20,6 +21,7 @@ interface IHttpRequest {
     id: string;
     req: IncomingMessage;
     res: ServerResponse;
+    result: Buffer[];
 }
 
 export class HttpServer {
@@ -39,7 +41,7 @@ export class HttpServer {
         this._socketServer.setHandler('data', (client, data: Buffer) => {
             // TODO: надо поправить, - тут ошибка, данные приходят разными блоками,
             // не в том же порядке как их отправляют
-            this.onGetResult(data);
+            this.onGetDataFromClient(data);
         });
     }
 
@@ -50,8 +52,7 @@ export class HttpServer {
     protected _startHttpServer(): void {
         const { httpPort } = this._options;
         this._httpServer = http.createServer((req, res) => {
-            const httpReq = this._createHttpRequest(req, res);
-            this.sendRequest(httpReq);
+            this.processRequest(req, res);
         });
         this._httpServer
             .listen(httpPort, () => {
@@ -70,6 +71,7 @@ export class HttpServer {
             id: getUuid(),
             req,
             res,
+            result: [],
         };
 
         this._httpRequests.set(httpReq.id, httpReq);
@@ -77,17 +79,24 @@ export class HttpServer {
         return httpReq;
     }
 
-    sendRequest(httpReq: IHttpRequest): void {
-        this._log(httpReq, 'new request');
+    /**
+     * Обрабатывает запрос к httpServer'у (и отправляет его socketClient'у)
+     */
+    processRequest(req: IncomingMessage, res: ServerResponse): void {
+        const url = req.url;
+        if (url === '/favicon.ico') {
+            return;
+        }
 
+        const httpReq = this._createHttpRequest(req, res);
         const id = httpReq.id;
-        const url = httpReq.req.url;
+        this._log(httpReq, 'new request');
 
         const requestStr = `${id}${url}`;
         this._socketServer.sendDataToClient(requestStr);
     }
 
-    onGetResult(data: Buffer): void {
+    onGetDataFromClient(data: Buffer): void {
         const id = data.subarray(0, REQUEST_ID_LENGTH).toString();
         const result = data;
         const httpReq = this._httpRequests.get(id);
@@ -100,14 +109,32 @@ export class HttpServer {
 
             if (hasEndText) {
                 const resultWithoutEndText = replace(result, endText, '');
-                httpReq.res.end(getResultWithoutId(resultWithoutEndText));
-                this._httpRequests.delete(id);
+                httpReq.result.push(getResultWithoutId(resultWithoutEndText));
+                this.sendResult(httpReq);
             } else {
-                httpReq.res.write(getResultWithoutId(result));
+                httpReq.result.push(getResultWithoutId(result));
             }
         } else {
             this._log(`ERROR req id: ${id} not found`);
         }
+    }
+
+    /**
+     * Отправляет httpClient'у полученные данные с socketClient'а
+     * @param httpReq
+     */
+    sendResult(httpReq: IHttpRequest): void {
+        const id = httpReq.id;
+
+        const data = Buffer.concat(httpReq.result);
+        this._log(
+            'sendResult: ',
+            `size: ${data.length}`
+            // `buff: ${bufferToHexStr(data)}`
+        );
+        httpReq.res.end(data);
+
+        this._httpRequests.delete(id);
     }
 
     protected _log(httpReq: IHttpRequest | any, ...args): void {

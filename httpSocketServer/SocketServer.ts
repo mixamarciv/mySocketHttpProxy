@@ -93,8 +93,8 @@ export class SocketServer {
         this._logSocketClient(
             client,
             'event data: ',
-            `size: ${data.length}`,
-            `buff: ${bufferToHexStr(Buffer.from(data))}`
+            `size: ${data.length}`
+            // `buff: ${bufferToHexStr(Buffer.from(data))}`
         );
         if (this._handlers.data) this._handlers.data(client, data);
     }
