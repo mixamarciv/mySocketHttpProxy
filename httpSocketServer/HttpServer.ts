@@ -4,17 +4,22 @@ import { URL } from 'url';
 import { wait, getUuidOnlyNumLetters } from '../../utils';
 import { log, logger } from '../logger';
 import { config } from '../config';
-import { SocketServer } from './SocketServer';
+import { OneWaySocketServer } from './OneWaySocketServer';
 import replace from 'buffer-replace';
 import { bufferToHexStr } from '../utils';
+import {
+    TEventDataCallback,
+    TEventConnectCallback,
+    TEventCloseCallback,
+} from '../interface';
 
 const REQUEST_ID_LENGTH = config.idRequestLength;
 const getUuid = getUuidOnlyNumLetters(REQUEST_ID_LENGTH);
 
 export interface IHttpServerOptions {
-    socketServer: SocketServer;
     httpPort: number;
     logEvents?: boolean;
+    onRequest: TEventDataCallback;
 }
 
 interface IHttpRequest {
@@ -26,7 +31,6 @@ interface IHttpRequest {
 
 export class HttpServer {
     protected _options: IHttpServerOptions;
-    protected _socketServer: SocketServer = null;
     protected _httpServer: http.Server = null;
     protected _httpRequests: Map<string, IHttpRequest>;
 
@@ -37,19 +41,9 @@ export class HttpServer {
 
     setConfig(config: IHttpServerOptions): void {
         this._options = { ...config };
-        this._socketServer = config.socketServer;
-        this._socketServer.setHandler('data', (client, data: Buffer) => {
-            // TODO: надо поправить, - тут ошибка, данные приходят разными блоками,
-            // не в том же порядке как их отправляют
-            this.onGetDataFromClient(data);
-        });
     }
 
     start(): void {
-        this._startHttpServer();
-    }
-
-    protected _startHttpServer(): void {
         const { httpPort } = this._options;
         this._httpServer = http.createServer((req, res) => {
             this.processRequest(req, res);
@@ -80,7 +74,7 @@ export class HttpServer {
     }
 
     /**
-     * Обрабатывает запрос к httpServer'у (и отправляет его socketClient'у)
+     * Обрабатывает запрос к httpServer'у
      */
     processRequest(req: IncomingMessage, res: ServerResponse): void {
         const url = req.url;
@@ -93,7 +87,7 @@ export class HttpServer {
         this._log(httpReq, 'new request');
 
         const requestStr = `${id}${url}`;
-        this._socketServer.sendDataToClient(requestStr);
+        this._options.onRequest(Buffer.from(requestStr));
     }
 
     onGetDataFromClient(data: Buffer): void {
@@ -128,6 +122,7 @@ export class HttpServer {
 
         const data = Buffer.concat(httpReq.result);
         this._log(
+            httpReq,
             'sendResult: ',
             `size: ${data.length}`
             // `buff: ${bufferToHexStr(data)}`

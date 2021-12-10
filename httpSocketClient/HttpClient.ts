@@ -17,8 +17,8 @@ const REQUEST_FROM = config.redirectRequestTo;
 
 export interface IHttpClientOptions {
     sendRequestTo: IHost;
-    socketClient: SocketClient;
     logEvents?: boolean;
+    onData: TEventDataCallback;
 }
 
 interface IRequestInfo {
@@ -29,7 +29,6 @@ interface IRequestInfo {
 
 export class HttpClient {
     protected _options: IHttpClientOptions;
-    protected _socketClient: SocketClient;
     protected _reqWorkers: Map<string, HttpRequestWorker>;
 
     constructor(config: IHttpClientOptions) {
@@ -39,10 +38,14 @@ export class HttpClient {
 
     setConfig(config: IHttpClientOptions): void {
         this._options = { ...config };
-        this._socketClient = config.socketClient;
-        this._socketClient.setOnDataHandler((data: Buffer) => {
-            this._onData(data.toString());
-        });
+    }
+
+    /**
+     * Задаем параметры для отправки нового http запроса
+     * @param data
+     */
+    setNewRequestData(data: Buffer): void {
+        this._onData(data.toString());
     }
 
     protected _onData(data: string): void {
@@ -60,7 +63,7 @@ export class HttpClient {
 
                 const dataBuff = Buffer.concat(results);
                 let pos = 0;
-                const CHUNK_SIZE = 2000;
+                const CHUNK_SIZE = 5000 * 5000 * 5000;
 
                 while (pos < dataBuff.length) {
                     const chunk = dataBuff.slice(pos, pos + CHUNK_SIZE);
@@ -96,7 +99,7 @@ export class HttpClient {
     }
 
     protected _sendData(data: Buffer): void {
-        this._socketClient.sendData(data);
+        this._options.onData(data);
     }
 
     protected _log(...args): void {

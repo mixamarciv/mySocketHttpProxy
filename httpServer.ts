@@ -1,4 +1,5 @@
 import { logger, log } from './logger';
+import { OneWayTransfer, IOneWayTransferOptions } from './common';
 import {
     SocketServer,
     ISocketServerOptions,
@@ -16,20 +17,42 @@ const LISTEN_HTTP_PORT = Number(process.env.SERVER_HTTP_PORT);
 startSocketProxy();
 
 function startSocketProxy() {
-    const socketServerConfig: ISocketServerOptions = {
-        logEvents: true,
-        socketPort: LISTEN_SOCKET_PORT,
-    };
+    let socketServer: SocketServer = null;
+    let httpServer: HttpServer = null;
+    let oneWayTransfer: OneWayTransfer = null;
 
-    const socketServer = new SocketServer(socketServerConfig);
-    socketServer.start();
+    const socketServerConfig: ISocketServerOptions = {
+        logEvents: false,
+        socketPort: LISTEN_SOCKET_PORT,
+        onData: (data) => {
+            oneWayTransfer.onData(data);
+            oneWayTransfer.onEndData();
+        },
+    };
 
     const httpServerConfig: IHttpServerOptions = {
-        logEvents: true,
+        logEvents: false,
         httpPort: LISTEN_HTTP_PORT,
-        socketServer,
+        onRequest: (data: Buffer) => {
+            oneWayTransfer.sendData(data);
+            oneWayTransfer.sendEndData();
+        },
     };
 
-    const httpServer = new HttpServer(httpServerConfig);
+    const oneWayTransferOptions: IOneWayTransferOptions = {
+        logEvents: true,
+        onData: (data: Buffer) => {
+            httpServer.onGetDataFromClient(data);
+        },
+        sendData: (data: Buffer) => {
+            socketServer.sendDataToClient(data);
+        },
+    };
+
+    socketServer = new SocketServer(socketServerConfig);
+    httpServer = new HttpServer(httpServerConfig);
+    oneWayTransfer = new OneWayTransfer(oneWayTransferOptions);
+
+    socketServer.start();
     httpServer.start();
 }

@@ -4,6 +4,7 @@ import { URL } from 'url';
 import { logUtils, wait } from '../utils';
 import { logger, log } from './logger';
 import { config } from './config';
+import { OneWayTransfer, IOneWayTransferOptions } from './common';
 import {
     SocketClient,
     ISocketClientOptions,
@@ -14,22 +15,45 @@ import {
 startSocketClient();
 
 async function startSocketClient() {
-    const connectOptions: ISocketClientOptions = {
+    let socketClient: SocketClient = null;
+    let httpClient: HttpClient = null;
+    let oneWayTransfer: OneWayTransfer = null;
+
+    const socketClientOptions: ISocketClientOptions = {
+        logEvents: false,
         port: config.socketServerPort,
         host: config.socketServerHost,
         timeout: config.clientConnectTimeout,
         maxReconnectCount: 5000,
         reconnectOnError: true,
-        logEvents: true,
+        onData: (data: Buffer) => {
+            oneWayTransfer.onData(data);
+            oneWayTransfer.onEndData();
+        },
     };
 
-    const socketClient = new SocketClient(connectOptions);
     const httpClientOptions: IHttpClientOptions = {
-        socketClient,
+        logEvents: false,
         sendRequestTo: config.redirectRequestTo,
-        logEvents: true,
+        onData: (data: Buffer) => {
+            oneWayTransfer.sendData(data);
+            oneWayTransfer.sendEndData();
+        },
     };
-    const httpClient = new HttpClient(httpClientOptions);
+
+    const oneWayTransferOptions: IOneWayTransferOptions = {
+        logEvents: true,
+        onData: (data: Buffer) => {
+            httpClient.setNewRequestData(data);
+        },
+        sendData: (data: Buffer) => {
+            socketClient.sendData(data);
+        },
+    };
+
+    socketClient = new SocketClient(socketClientOptions);
+    httpClient = new HttpClient(httpClientOptions);
+    oneWayTransfer = new OneWayTransfer(oneWayTransferOptions);
 
     socketClient.connect();
 }

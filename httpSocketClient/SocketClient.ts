@@ -38,26 +38,6 @@ export class SocketClient {
         this._options = { ...config };
     }
 
-    setOnConnectHandler(handler: TEventCallback): void {
-        this._options.onConnect = handler;
-    }
-
-    setOnDataHandler(handler: TEventDataCallback): void {
-        this._options.onData = handler;
-    }
-
-    setOnEndHandler(handler: TEventCallback): void {
-        this._options.onEnd = handler;
-    }
-
-    setOnCloseHandler(handler: TEventCallback): void {
-        this._options.onClose = handler;
-    }
-
-    setOnErrorHandler(handler: TEventErrorCallback): void {
-        this._options.onError = handler;
-    }
-
     async connect(): Promise<boolean> {
         this.disconnect();
         return this.reconnect();
@@ -112,6 +92,7 @@ export class SocketClient {
         this._client.on('data', (data) => this._onData(data));
         this._client.on('end', () => this._onEnd());
         this._client.on('close', () => this._onClose());
+        this._client.on('timeout', () => this._onTimeout());
     }
 
     protected _onConnect(): void {
@@ -152,6 +133,10 @@ export class SocketClient {
         this._log('event close');
 
         if (this._options.onClose) this._options.onClose();
+    }
+
+    protected _onTimeout(): void {
+        this._log('event timeout');
     }
 
     protected _log(...args): void {
