@@ -1,4 +1,5 @@
 import { logger, log } from './logger';
+import { config } from './config';
 import { OneWayTransfer, IOneWayTransferOptions } from './common';
 import {
     SocketServer,
@@ -7,8 +8,8 @@ import {
     IHttpServerOptions,
 } from './httpSocketServer';
 
-const LISTEN_SOCKET_PORT = Number(process.env.SERVER_SOCKET_PORT);
-const LISTEN_HTTP_PORT = Number(process.env.SERVER_HTTP_PORT);
+const LISTEN_SOCKET_PORT = config.socketServerPort;
+const LISTEN_HTTP_PORT = config.httpServerPort;
 
 startSocketProxy();
 
