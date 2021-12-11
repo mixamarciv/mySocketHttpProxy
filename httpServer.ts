@@ -27,7 +27,7 @@ function startSocketProxy() {
     };
 
     const httpServerConfig: IHttpServerOptions = {
-        logEvents: false,
+        logEvents: true,
         httpPort: LISTEN_HTTP_PORT,
         onRequest: (data: Buffer) => {
             oneWayTransfer.sendData(data);

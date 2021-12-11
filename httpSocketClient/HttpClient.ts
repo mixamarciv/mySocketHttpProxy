@@ -1,20 +1,32 @@
 import http from 'http';
-import { IHost } from '../config';
-import { URL } from 'url';
 import { log, logger } from '../logger';
 import { config } from '../config';
 import {
     TEventCallback,
     TEventErrorCallback,
     TEventDataCallback,
+    IRequestData,
+    IResponseData,
+    IHost,
 } from '../interface';
+import {
+    HttpRequestWorker,
+    IHttpRequestWorkerOptions,
+} from './HttpRequestWorker';
+import {
+    bufferToHexStr,
+    getId,
+    getMetaSizeFromBlock,
+    getMetaSizeForNumber,
+} from '../utils';
 
-const REQUEST_ID_LENGTH = config.idRequestLength;
-const REQUEST_FROM = config.redirectRequestTo;
+const ID_LENGTH = config.idRequestLength;
+const META_LENGTH = config.metaBlockLength;
 
 export interface IHttpClientOptions {
     sendRequestTo: IHost;
     logEvents?: boolean;
+    logWorkerEvents?: boolean;
     onData: TEventDataCallback;
 }
 
@@ -36,32 +48,55 @@ export class HttpClient {
      * @param data
      */
     setNewRequestData(data: Buffer): void {
-        this._onData(data.toString());
+        const requestData: IRequestData = JSON.parse(data.toString());
+
+        this._onData(requestData);
     }
 
-    protected _onData(data: string): void {
-        this._log('event data', data);
+    protected _onData(requestData: IRequestData): void {
+        this._log(
+            `event data id: ${requestData.id}`,
+            `headers: ${Object.keys(requestData.headers).length}`
+        );
 
-        const id = data.substr(0, REQUEST_ID_LENGTH);
-        const idBuff = Buffer.from(id);
-        const url = data.substr(REQUEST_ID_LENGTH);
+        const { id } = requestData;
+
+        const results: Buffer[] = [Buffer.from(id)];
         let isStopped = false;
-        const results: Buffer[] = [];
-
         const stopWorker = () => {
             if (!isStopped) {
                 isStopped = true;
 
                 const dataBuff = Buffer.concat(results);
-                this._sendData(Buffer.concat([idBuff, dataBuff]));
+
+                this._log(
+                    `sendData id: ${requestData.id}`,
+                    `size: ${dataBuff.length} `
+                );
+                this._sendData(dataBuff);
                 this._stopWorker(id);
             }
         };
 
         const params: IHttpRequestWorkerOptions = {
-            logEvents: this._options.logEvents,
-            id,
-            url,
+            logEvents: this._options.logWorkerEvents,
+            requestData,
+            onResponse: (res) => {
+                const responseData: IResponseData = {
+                    headers: res.headers,
+                };
+                const responseDataJson = JSON.stringify(responseData);
+                const metaSize = getMetaSizeForNumber(responseDataJson.length);
+                const meta = Buffer.from(metaSize + responseDataJson);
+
+                this._log(
+                    `onResponse id: ${requestData.id}`,
+                    `headers: ${Object.keys(responseData.headers).length}`,
+                    `sizeMeta: ${responseDataJson.length} `
+                );
+
+                results.push(meta);
+            },
             onData: (data1) => {
                 // собираем данные
                 results.push(data1);
@@ -87,95 +122,6 @@ export class HttpClient {
     protected _log(...args): void {
         if (this._options.logEvents) {
             log('HttpClient', ...args);
-        }
-    }
-}
-
-interface IHttpRequestWorkerOptions {
-    logEvents?: boolean;
-    id: string;
-    url: string;
-    onData?: TEventDataCallback;
-    onEnd?: TEventCallback;
-    onClose?: TEventCallback;
-    onError?: TEventErrorCallback;
-}
-
-class HttpRequestWorker {
-    protected _options: IHttpRequestWorkerOptions;
-    protected _request: http.ClientRequest;
-
-    constructor(config: IHttpRequestWorkerOptions) {
-        this.setConfig(config);
-    }
-
-    setConfig(config: IHttpRequestWorkerOptions): void {
-        this._options = { ...config };
-    }
-
-    protected _getUrl(): string {
-        let url = this._options.url;
-        if (!url || /^\//.test(url)) {
-            url = 'http://anyhost.hz' + url;
-        }
-
-        const urlBuilder = new URL(url);
-        urlBuilder.hostname = REQUEST_FROM.host;
-        urlBuilder.port = String(REQUEST_FROM.port);
-
-        return urlBuilder.toString();
-    }
-
-    sendRequest(): void {
-        const url = this._getUrl();
-
-        this._request = http.request(url, (res) => {
-            // res.setEncoding('utf8');  - из-за этой строчки бьются бинарные данные
-            res.on('data', (chunk) => this._onData(chunk));
-            res.on('end', () => this._onEnd());
-            res.on('close', () => this._onClose());
-            res.on('error', (e) => this._onError(e));
-        });
-
-        this._request.on('error', (e) => this._onError(e));
-        this._request.on('close', () => this._onClose());
-        this._request.end();
-    }
-
-    protected _onError(err): void {
-        this._log('event error: ', err);
-
-        if (this._options.onError) this._options.onError(err);
-    }
-
-    protected _onData(data: Buffer): void {
-        this._log(
-            'event data: ',
-            'size:',
-            data.length
-            // bufferToHexStr(Buffer.from(data))
-        );
-        let dataBuff = data;
-        if (!Buffer.isBuffer(data)) dataBuff = Buffer.from(data);
-
-        if (this._options.onData) this._options.onData(dataBuff);
-    }
-
-    protected _onEnd(): void {
-        this._log('event end');
-
-        if (this._options.onEnd) this._options.onEnd();
-    }
-
-    protected _onClose(): void {
-        this._log('event close');
-
-        if (this._options.onClose) this._options.onClose();
-    }
-
-    protected _log(...args): void {
-        if (this._options.logEvents) {
-            log('HttpRequestWorker', ...args);
         }
     }
 }

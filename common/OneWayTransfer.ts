@@ -1,6 +1,11 @@
 import { log, logger } from '../logger';
 import { config } from '../config';
-import { bufferToHexStr, getUuidOnlyNumLetters } from '../utils';
+import {
+    bufferToHexStr,
+    getId,
+    getMetaSizeFromBlock,
+    getMetaSizeForNumber,
+} from '../utils';
 import {
     TAnyEventCallback,
     TEventCallback,
@@ -8,10 +13,8 @@ import {
     TEventDataCallback,
 } from '../interface';
 
-const ID_LENGTH = 4;
-const META_SIZE = 8;
-const META_RADIX = 10;
-const getUuid = getUuidOnlyNumLetters(ID_LENGTH);
+const ID_LENGTH = config.idRequestLength;
+const META_LENGTH = config.metaBlockLength;
 
 export interface IOneWayTransferOptions {
     logEvents?: boolean;
@@ -54,8 +57,10 @@ export class OneWayTransfer {
 
     protected _uploadFirstRecivedBlock(data: Buffer): void {
         const id = getIdFromBlock(data);
-        const size = getMetaSizeFromBlock(data);
-        const dataBlock = data.subarray(ID_LENGTH + META_SIZE);
+        const size = getMetaSizeFromBlock(
+            data.subarray(ID_LENGTH, ID_LENGTH + META_LENGTH)
+        );
+        const dataBlock = data.subarray(ID_LENGTH + META_LENGTH);
         const recivedSize = dataBlock.length;
 
         const recivedData = (this._recivedData = {
@@ -112,8 +117,8 @@ export class OneWayTransfer {
 
     sendData(data: Buffer): void {
         const size = data.length;
-        const id = getUuid();
-        const sizeMeta = Number(size).toString(META_RADIX).padStart(META_SIZE);
+        const id = getId();
+        const sizeMeta = getMetaSizeForNumber(size);
         const meta = Buffer.from(id + sizeMeta);
         const buff = Buffer.concat([meta, data]);
 
@@ -130,9 +135,4 @@ export class OneWayTransfer {
 
 function getIdFromBlock(data: Buffer): string {
     return data.subarray(0, ID_LENGTH).toString();
-}
-
-function getMetaSizeFromBlock(data: Buffer): number {
-    const s = data.subarray(ID_LENGTH, ID_LENGTH + META_SIZE).toString();
-    return parseInt(s, META_RADIX);
 }

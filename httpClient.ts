@@ -28,7 +28,8 @@ async function startSocketClient() {
     };
 
     const httpClientOptions: IHttpClientOptions = {
-        logEvents: false,
+        logEvents: true,
+        logWorkerEvents: false,
         sendRequestTo: config.redirectRequestTo,
         onData: (data: Buffer) => {
             oneWayTransfer.sendData(data);
