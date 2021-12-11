@@ -7,10 +7,6 @@ import {
     IHttpServerOptions,
 } from './httpSocketServer';
 
-import net from 'net';
-import http from 'http';
-import { URL } from 'url';
-
 const LISTEN_SOCKET_PORT = Number(process.env.SERVER_SOCKET_PORT);
 const LISTEN_HTTP_PORT = Number(process.env.SERVER_HTTP_PORT);
 

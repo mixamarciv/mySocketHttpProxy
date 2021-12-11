@@ -1,10 +1,7 @@
-import net from 'net';
 import http from 'http';
 import { IHost } from '../config';
 import { URL } from 'url';
-import { wait, bufferToHexStr } from '../utils';
 import { log, logger } from '../logger';
-import { SocketClient } from './SocketClient';
 import { config } from '../config';
 import {
     TEventCallback,
@@ -19,12 +16,6 @@ export interface IHttpClientOptions {
     sendRequestTo: IHost;
     logEvents?: boolean;
     onData: TEventDataCallback;
-}
-
-interface IRequestInfo {
-    id: string;
-    url: string;
-    response: http.ServerResponse;
 }
 
 export class HttpClient {
@@ -62,16 +53,7 @@ export class HttpClient {
                 isStopped = true;
 
                 const dataBuff = Buffer.concat(results);
-                let pos = 0;
-                const CHUNK_SIZE = 5000 * 5000 * 5000;
-
-                while (pos < dataBuff.length) {
-                    const chunk = dataBuff.slice(pos, pos + CHUNK_SIZE);
-                    this._sendData(Buffer.concat([idBuff, chunk]));
-                    pos += CHUNK_SIZE;
-                }
-
-                this._sendData(Buffer.from(`${id}/${id}`));
+                this._sendData(Buffer.concat([idBuff, dataBuff]));
                 this._stopWorker(id);
             }
         };

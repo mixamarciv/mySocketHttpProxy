@@ -2,9 +2,6 @@ import net from 'net';
 import { log, logger } from '../logger';
 import { bufferToHexStr } from '../utils';
 import {
-    TAnyEventCallback,
-    TEventCallback,
-    TEventErrorCallback,
     TEventDataCallback,
     TEventConnectCallback,
     TEventCloseCallback,

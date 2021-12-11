@@ -1,4 +1,3 @@
-import net from 'net';
 import http, { IncomingMessage, ServerResponse } from 'http';
 import { URL } from 'url';
 import { wait, getUuidOnlyNumLetters } from '../../utils';
@@ -78,9 +77,6 @@ export class HttpServer {
      */
     processRequest(req: IncomingMessage, res: ServerResponse): void {
         const url = req.url;
-        if (url === '/favicon.ico') {
-            return;
-        }
 
         const httpReq = this._createHttpRequest(req, res);
         const id = httpReq.id;
@@ -92,22 +88,11 @@ export class HttpServer {
 
     onGetDataFromClient(data: Buffer): void {
         const id = data.subarray(0, REQUEST_ID_LENGTH).toString();
-        const result = data;
+        const result = data.subarray(REQUEST_ID_LENGTH);
         const httpReq = this._httpRequests.get(id);
         if (httpReq) {
-            const getResultWithoutId = (buf: Buffer) => {
-                return replace(buf, id, '');
-            };
-            const endText = Buffer.from(`${id}\/${id}`);
-            const hasEndText = result.indexOf(endText) >= 0;
-
-            if (hasEndText) {
-                const resultWithoutEndText = replace(result, endText, '');
-                httpReq.result.push(getResultWithoutId(resultWithoutEndText));
-                this.sendResult(httpReq);
-            } else {
-                httpReq.result.push(getResultWithoutId(result));
-            }
+            httpReq.result.push(result);
+            this.sendResult(httpReq);
         } else {
             this._log(`ERROR req id: ${id} not found`);
         }
