@@ -8,8 +8,10 @@ import {
     TEventDataCallback,
 } from '../interface';
 
-const REQUEST_ID_LENGTH = config.idRequestLength;
-const getUuid = getUuidOnlyNumLetters(REQUEST_ID_LENGTH);
+const ID_LENGTH = 4;
+const META_SIZE = 8;
+const META_RADIX = 10;
+const getUuid = getUuidOnlyNumLetters(ID_LENGTH);
 
 export interface IOneWayTransferOptions {
     logEvents?: boolean;
@@ -17,21 +19,12 @@ export interface IOneWayTransferOptions {
     sendData: TEventDataCallback;
 }
 
-const getIdFromData = (data: Buffer): string =>
-    data.subarray(0, REQUEST_ID_LENGTH).toString();
-
-const getDataWithoutId = (data: Buffer): Buffer =>
-    data.subarray(REQUEST_ID_LENGTH);
-
-enum EReadyType {
-    forSend = 'forSend',
-    forEmit = 'forEmit',
-}
-
-interface IReadyData {
-    id: string;
-    type: EReadyType;
-    data: Buffer;
+// интерфейс для полученной части данных
+interface IRecivedData {
+    readonly id: string; // для какого блока данных ждем следующую часть
+    readonly size: number; // общий размер данных (то что должно прийти)
+    data: Buffer[]; // уже полученная часть данных
+    recivedSize: number; // полученный размер данных
 }
 
 /**
@@ -40,15 +33,11 @@ interface IReadyData {
  */
 export class OneWayTransfer {
     protected _options: IOneWayTransferOptions;
-    protected _getData: Buffer[];
-    protected _sendData: Buffer[];
-    protected _readyData: IReadyData[]; // готовые для отправки блоки данных
-    protected _waitConfirmForId: string; // для какого блока данных ждем подтверждения
+    protected _recivedData: IRecivedData;
 
     constructor(config: IOneWayTransferOptions) {
-        this._getData = [];
-        this._sendData = [];
         this.setConfig(config);
+        this._recivedData = null;
     }
 
     setConfig(config: IOneWayTransferOptions): void {
@@ -56,33 +45,80 @@ export class OneWayTransfer {
     }
 
     onData(data: Buffer): void {
-        this._getData.push(data);
+        if (!this._recivedData) {
+            this._uploadFirstRecivedBlock(data);
+        } else {
+            this._uploadNextBlock(data);
+        }
     }
 
-    onEndData(): void {
-        const buff = Buffer.concat(this._getData);
-        this._getData = [];
-        this._addReadyData(EReadyType.forEmit, buff);
+    protected _uploadFirstRecivedBlock(data: Buffer): void {
+        const id = getIdFromBlock(data);
+        const size = getMetaSizeFromBlock(data);
+        const dataBlock = data.subarray(ID_LENGTH + META_SIZE);
+        const recivedSize = dataBlock.length;
+
+        const recivedData = (this._recivedData = {
+            id,
+            size,
+            recivedSize,
+            data: [dataBlock],
+        });
+
+        if (recivedSize === size) {
+            this._onReadyData();
+        } else if (recivedSize > size) {
+            recivedData.recivedSize = size;
+            recivedData.data = [dataBlock.subarray(0, size)];
+            this._onReadyData();
+            this.onData(dataBlock.subarray(size));
+        }
+    }
+
+    protected _uploadNextBlock(data: Buffer): void {
+        const d = this._recivedData;
+        const recivedSize = data.length;
+        const needSize = d.size - d.recivedSize;
+
+        if (recivedSize === needSize) {
+            d.recivedSize += recivedSize;
+            d.data.push(data);
+            this._onReadyData();
+        } else if (recivedSize > needSize) {
+            d.recivedSize += needSize;
+            d.data.push(data.subarray(0, needSize));
+            this._onReadyData();
+            this.onData(data.subarray(needSize));
+        } else {
+            d.recivedSize += recivedSize;
+            d.data.push(data);
+        }
+    }
+
+    protected _onReadyData(): void {
+        const recivedData: IRecivedData = this._recivedData;
+        const { id, size } = recivedData;
+        const count = recivedData.data.length;
+        const buff = Buffer.concat(recivedData.data);
+        this._recivedData = null;
+
+        this._log(
+            `recived data id: ${id} `,
+            `blocks: ${count} `,
+            `size: ${size}`
+        );
+        this._options.onData(buff);
     }
 
     sendData(data: Buffer): void {
-        this._sendData.push(data);
-    }
+        const size = data.length;
+        const id = getUuid();
+        const sizeMeta = Number(size).toString(META_RADIX).padStart(META_SIZE);
+        const meta = Buffer.from(id + sizeMeta);
+        const buff = Buffer.concat([meta, data]);
 
-    sendEndData(): void {
-        const buff = Buffer.concat(this._sendData);
-        this._sendData = [];
-        this._addReadyData(EReadyType.forSend, buff);
-    }
-
-    protected _addReadyData(type: EReadyType, data: Buffer): void {
-        this._log(
-            `ready data ${type} `,
-            `size: ${data.length}`
-            // `buff: ${bufferToHexStr(Buffer.from(data))}`
-        );
-        if (type === EReadyType.forSend) this._options.sendData(data);
-        if (type === EReadyType.forEmit) this._options.onData(data);
+        this._log(`send data id: ${id} `, `blocks: 1 `, `size: ${size}`);
+        this._options.sendData(buff);
     }
 
     protected _log(...args): void {
@@ -90,4 +126,13 @@ export class OneWayTransfer {
             log('OneWayTransfer ', ...args);
         }
     }
+}
+
+function getIdFromBlock(data: Buffer): string {
+    return data.subarray(0, ID_LENGTH).toString();
+}
+
+function getMetaSizeFromBlock(data: Buffer): number {
+    const s = data.subarray(ID_LENGTH, ID_LENGTH + META_SIZE).toString();
+    return parseInt(s, META_RADIX);
 }

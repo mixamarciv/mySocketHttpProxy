@@ -28,7 +28,6 @@ async function startSocketClient() {
         reconnectOnError: true,
         onData: (data: Buffer) => {
             oneWayTransfer.onData(data);
-            oneWayTransfer.onEndData();
         },
     };
 
@@ -37,7 +36,6 @@ async function startSocketClient() {
         sendRequestTo: config.redirectRequestTo,
         onData: (data: Buffer) => {
             oneWayTransfer.sendData(data);
-            oneWayTransfer.sendEndData();
         },
     };
 

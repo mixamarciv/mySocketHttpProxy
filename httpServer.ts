@@ -26,7 +26,6 @@ function startSocketProxy() {
         socketPort: LISTEN_SOCKET_PORT,
         onData: (data) => {
             oneWayTransfer.onData(data);
-            oneWayTransfer.onEndData();
         },
     };
 
@@ -35,7 +34,6 @@ function startSocketProxy() {
         httpPort: LISTEN_HTTP_PORT,
         onRequest: (data: Buffer) => {
             oneWayTransfer.sendData(data);
-            oneWayTransfer.sendEndData();
         },
     };
 
